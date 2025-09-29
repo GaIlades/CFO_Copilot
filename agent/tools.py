@@ -1,5 +1,6 @@
 import pandas as pd
-import os 
+import os
+import plotly.graph_objects as go
 
 class FinanceTools:
     def __init__(self, fixtures_dir='fixtures'):
@@ -13,9 +14,7 @@ class FinanceTools:
         try: 
             path = os.path.join(self.fixtures_dir, 'actuals.csv')
             df = pd.read_csv(path)
-            print(f"Loaded actuals: {len(df)} rows") 
-            print(f"Columns: {df.columns.tolist()}")
-            print(f"Sample data:\n{df.head()}")
+            print(f"Loaded actuals: {len(df)} rows")
             return df
         except Exception as e:
             print(f"Error loading actuals: {e}")
@@ -25,7 +24,7 @@ class FinanceTools:
         try: 
             path = os.path.join(self.fixtures_dir, 'budget.csv')
             df = pd.read_csv(path)
-            print(f"Loaded budget: {len(df)} rows") 
+            print(f"Loaded budget: {len(df)} rows")
             return df
         except Exception as e:
             print(f"Error loading budget: {e}")
@@ -35,7 +34,7 @@ class FinanceTools:
         try: 
             path = os.path.join(self.fixtures_dir, 'cash.csv')
             df = pd.read_csv(path)
-            print(f"Loaded cash: {len(df)} rows") 
+            print(f"Loaded cash: {len(df)} rows")
             return df
         except Exception as e:
             print(f"Error loading cash: {e}")
@@ -45,7 +44,7 @@ class FinanceTools:
         try: 
             path = os.path.join(self.fixtures_dir, 'fx.csv')
             df = pd.read_csv(path)
-            print(f"Loaded fx: {len(df)} rows") 
+            print(f"Loaded fx: {len(df)} rows")
             return df
         except Exception as e:
             print(f"Error loading fx: {e}")
@@ -59,45 +58,70 @@ class FinanceTools:
             df[f'{amount_col}_usd'] = df[amount_col]    
             return df
         
-        # Merge with FX data
         df_with_fx = df.merge(self.fx, on=['month', 'currency'], how='left')
-        
-        # Handle missing FX rates (assume 1.0 for USD or missing rates)
         df_with_fx['rate_to_usd'] = df_with_fx['rate_to_usd'].fillna(1.0)
         df_with_fx[f'{amount_col}_usd'] = df_with_fx[amount_col] * df_with_fx['rate_to_usd']
         
         return df_with_fx
 
-    def get_revenue_summary(self, month=None):
-        """Get revenue summary with proper variable scoping"""
-        if self.actuals.empty:
-            return {"error": "No actuals data available"}
+    def get_revenue_vs_budget(self, month=None):
+        """Get revenue vs budget comparison"""
+        if self.actuals.empty or self.budget.empty:
+            return pd.DataFrame()
         
-        # Filter for revenue data - FIXED: Define revenue_data properly
-        revenue_data = self.actuals[self.actuals['account_category'].str.contains("Revenue", case=False, na=False)].copy()
+        actuals_rev = self.actuals[self.actuals['account_category'].str.contains('Revenue', case=False, na=False)].copy()
+        budget_rev = self.budget[self.budget['account_category'].str.contains('Revenue', case=False, na=False)].copy()
         
-        if revenue_data.empty:
-            return {"error": "No revenue data found in actuals"}
+        if actuals_rev.empty or budget_rev.empty:
+            return pd.DataFrame()
         
-        # Filter by month if specified
+        actuals_usd = self.convert_to_usd(actuals_rev)
+        budget_usd = self.convert_to_usd(budget_rev)
+        
         if month:
-            revenue_data = revenue_data[revenue_data['month'] == month]
-            if revenue_data.empty:
-                return {"error": f"No revenue data found for month: {month}"}
+            actuals_usd = actuals_usd[actuals_usd['month'] == month]
+            budget_usd = budget_usd[budget_usd['month'] == month]
         
-        # Convert to USD
-        revenue_usd = self.convert_to_usd(revenue_data)
+        actuals_agg = actuals_usd.groupby('month')['amount_usd'].sum().reset_index()
+        budget_agg = budget_usd.groupby('month')['amount_usd'].sum().reset_index()
+        
+        comparison = actuals_agg.merge(budget_agg, on='month', suffixes=('_actual', '_budget'))
+        comparison['variance'] = comparison['amount_usd_actual'] - comparison['amount_usd_budget']
+        comparison['variance_pct'] = (comparison['variance'] / comparison['amount_usd_budget']) * 100
+        
+        return comparison
 
-        total_revenue = revenue_usd['amount_usd'].sum()
-        months = sorted(revenue_usd['month'].unique())
-        entities = sorted(revenue_usd['entity'].unique())
-
-        return {
-            "total_revenue_usd": total_revenue,
-            "months": months,
-            "entities": entities,
-            "records": len(revenue_usd)
-        }
+    def create_revenue_chart(self, data):
+        """Create revenue vs budget chart"""
+        if data.empty:
+            return None
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=data['month'],
+            y=data['amount_usd_actual'],
+            name='Actual',
+            marker_color='#2E86AB'
+        ))
+        
+        fig.add_trace(go.Bar(
+            x=data['month'],
+            y=data['amount_usd_budget'],
+            name='Budget',
+            marker_color='#A23B72'
+        ))
+        
+        fig.update_layout(
+            title='Revenue: Actual vs Budget',
+            xaxis_title='Month',
+            yaxis_title='Amount (USD)',
+            barmode='group',
+            template='plotly_white',
+            height=400
+        )
+        
+        return fig
 
     def get_data_summary(self):
         """Get summary of all loaded data"""
