@@ -23,32 +23,13 @@ if "messages" not in st.session_state:
 def init_tools():
     return FinanceTools()
 
-tools = init_tools()
-
-# ----------------------
-# Helper: generate response
-# ----------------------
-def generate_response(prompt: str):
-    """Generate a response based on user prompt."""
-    data_summary = tools.get_data_summary()
-
-    if "data" in prompt.lower() or "show" in prompt.lower():
-        if "actuals" in prompt.lower():
-            if not tools.actuals.empty:
-                response = f"**Actuals Data Overview:**\n\n"
-                response += f"• Total records: {len(tools.actuals)}\n"
-                response += f"• Columns: {', '.join(tools.actuals.columns)}\n\n"
-                response += f"**Sample data:**\n{tools.actuals.head().to_string()}"
-            else:
-                response = "No actuals data found."
-        else:
-            response = f"**Data Summary:**\n\n"
-            for dataset, info in data_summary.items():
-                response += f"• {dataset.title()}: {info['rows']} rows\n"
-    else:
-        response = f"I understand you asked: '{prompt}'\n\nI'm still learning! Try asking about 'data' or 'actuals' for now."
-
-    return response
+try:
+    tools = init_tools()
+    data_loaded = True
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    data_loaded = False
+    tools = None
 
 # ----------------------
 # Header
@@ -57,36 +38,65 @@ st.title("💰 CFO Copilot")
 st.markdown("Ask me anything about your financials!")
 
 # ----------------------
+# Helper: generate response
+# ----------------------
+def generate_response(prompt: str) -> str:
+    """Generate assistant response given a user prompt."""
+    if not data_loaded:
+        return "Error loading CSV files."
+
+    prompt_lower = prompt.lower()
+    #revenue
+    if "revenue" in prompt_lower:
+        result = tools.get_revenue_summary()
+        if "error" in result:
+            return f" {result['error']}"
+        else:
+            response = f"**Revenue Summary:**\n\n"
+            response += f" Total Revenue: ${result['total_revenue_usd']:,.2f} USD\n"
+            response += f" Months covered: {', '.join(result['months'])}\n"
+            response += f" Entities: {', '.join(result['entities'])}\n"
+            response += f" Records: {result['records']}"
+            return response
+    #data summary
+    elif "data" in prompt_lower:
+        data_summary = tools.get_data_summary()
+        response = f" **Data Summary:**\n\n"
+        for dataset, info in data_summary.items():
+            response += f" **{dataset.title()}**: {info['rows']} rows\n"
+        return response
+
+    else:
+        response = f"I understand you asked: '{prompt}'\n\n"
+        response += "I can help with:\n"
+        response += "Revenue analysis (try 'show revenue summary')\n"
+        response += "Data overview (try 'what data do we have')"
+        return response
+
+# ----------------------
 # Sidebar with data info
 # ----------------------
-st.sidebar.header("Data Overview")
-data_summary = tools.get_data_summary()
+if data_loaded:
+    st.sidebar.header("Data Overview")
+    data_summary = tools.get_data_summary()
 
-for dataset, info in data_summary.items():
-    st.sidebar.write(f"**{dataset.title()}**: {info['rows']} rows")
+    for dataset, info in data_summary.items():
+        st.sidebar.write(f"**{dataset.title()}**: {info['rows']} rows")
 
-# Add a debug expander
-with st.sidebar.expander("Debug Info"):
-    st.json(data_summary)
+    st.sidebar.header("Try asking:")
+    sample_questions = [
+        "Show me revenue summary",
+        "What data do we have?"
+    ]
 
-# ----------------------
-# Sample questions in sidebar
-# ----------------------
-st.sidebar.header("Try asking:")
-sample_questions = [
-    "Show me the actuals data",
-    "What data do we have?",
-    "Display revenue information"
-]
+    for question in sample_questions:
+        if st.sidebar.button(question, key=f"sample_{hash(question)}"):
+            st.session_state.messages.append({"role": "user", "content": question})
+            response = generate_response(question)
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
-for question in sample_questions:
-    if st.sidebar.button(question, key=f"sample_{hash(question)}"):
-        # Save user message
-        st.session_state.messages.append({"role": "user", "content": question})
-
-        # Generate and save assistant response
-        response = generate_response(question)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+else:
+    st.sidebar.error("Data not loaded")
 
 # ----------------------
 # Messaging
@@ -99,12 +109,10 @@ for message in st.session_state.messages:
 # User input
 # ----------------------
 if prompt := st.chat_input("Ask about your financials..."):
-    # Save user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate and save assistant response
     response = generate_response(prompt)
     st.session_state.messages.append({"role": "assistant", "content": response})
     with st.chat_message("assistant"):
