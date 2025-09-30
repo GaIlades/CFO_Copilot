@@ -56,7 +56,9 @@ if data_loaded:
         "What was February 2024 revenue vs budget in USD?",
         "Show revenue vs budget for all months",
         "Show gross margin % trend for last 3 months",
-        "What is our gross margin?"
+        "What is our gross margin?",
+        "Break down Opex by category for February 2024",
+        "Show operating expenses"
     ]
 
     for question in sample_questions:

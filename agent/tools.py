@@ -179,6 +179,48 @@ class FinanceTools:
         
         return fig
 
+    def get_opex_breakdown(self, month=None):
+        """Get operating expenses breakdown by category"""
+        if self.actuals.empty:
+            return pd.DataFrame()
+        
+        # Filter for Opex categories
+        opex = self.actuals[self.actuals['account_category'].str.contains('Opex:', case=False, na=False)].copy()
+        
+        if opex.empty:
+            return pd.DataFrame()
+        
+        opex_usd = self.convert_to_usd(opex)
+        
+        if month:
+            opex_usd = opex_usd[opex_usd['month'] == month]
+        
+        # Group by category
+        opex_breakdown = opex_usd.groupby('account_category')['amount_usd'].sum().reset_index()
+        opex_breakdown.rename(columns={'account_category': 'category'}, inplace=True)
+        opex_breakdown = opex_breakdown.sort_values('amount_usd', ascending=False)
+        
+        return opex_breakdown
+
+    def create_opex_chart(self, data):
+        """Create opex breakdown pie chart"""
+        if data.empty:
+            return None
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=data['category'],
+            values=data['amount_usd'],
+            hole=0.3
+        )])
+        
+        fig.update_layout(
+            title='Operating Expenses Breakdown',
+            template='plotly_white',
+            height=400
+        )
+        
+        return fig
+
     def get_data_summary(self):
         """Get summary of all loaded data"""
         summary = {

@@ -22,16 +22,38 @@ class CFOPlanner:
         return None
     
     def extract_months_count(self, question):
+        """Extract number of months from question like 'last 3 months' -> 3"""
         match = re.search(r'last\s+(\d+)\s+months?', question.lower())
         if match:
             return int(match.group(1))
         return None
     
     def answer_question(self, question):
+        """Answer financial questions"""
         question_lower = question.lower()
         
+        # OpEx Breakdown
+        if 'opex' in question_lower or 'operating expense' in question_lower or 'breakdown' in question_lower:
+            month = self.extract_month(question)
+            data = self.tools.get_opex_breakdown(month)
+            
+            if data.empty:
+                return {"text": "No operating expense data found.", "chart": None}
+            
+            chart = self.tools.create_opex_chart(data)
+            
+            total_opex = data['amount_usd'].sum()
+            text = f"**Operating Expenses Breakdown{' for ' + month if month else ''}:**\n\n"
+            text += f"Total OpEx: ${total_opex:,.0f}\n\n"
+            
+            for _, row in data.iterrows():
+                pct = (row['amount_usd'] / total_opex) * 100
+                text += f"{row['category']}: ${row['amount_usd']:,.0f} ({pct:.1f}%)\n"
+            
+            return {"text": text, "chart": chart}
+        
         # Gross Margin
-        if 'margin' in question_lower or 'gross' in question_lower:
+        elif 'margin' in question_lower or 'gross' in question_lower:
             months = self.extract_months_count(question)
             data = self.tools.get_gross_margin_trend(months)
             
@@ -49,7 +71,7 @@ class CFOPlanner:
             
             if len(data) > 1:
                 trend = "increasing" if data['gross_margin_pct'].iloc[-1] > data['gross_margin_pct'].iloc[0] else "decreasing"
-                text += f"• Trend: {trend.title()}"
+                text += f"Trend: {trend.title()}"
             
             return {"text": text, "chart": chart}
         
@@ -63,7 +85,6 @@ class CFOPlanner:
             
             chart = self.tools.create_revenue_chart(data)
             
-            # Format response
             if month:
                 row = data.iloc[0]
                 text = f"**Revenue vs Budget for {month}:**\n\n"
@@ -78,13 +99,13 @@ class CFOPlanner:
                 
                 text = f"**Revenue vs Budget Summary:**\n\n"
                 text += f"Total Actual: ${total_actual:,.0f}\n"
-                text += f" Budget: ${total_budget:,.0f}\n"
+                text += f"Total Budget: ${total_budget:,.0f}\n"
                 text += f"Total Variance: ${total_variance:,.0f} ({variance_pct:.1f}%)"
             
             return {"text": text, "chart": chart}
         
         else:
             return {
-                "text": "I can help you with:\nRevenue vs budget analysis\nGross margin trends\n\nTry asking:\n'Show gross margin for last 3 months'\n'What was February 2024 revenue vs budget?'",
+                "text": "I can help you with:\nRevenue vs budget analysis\nGross margin trends\nOperating expenses breakdown\n\nTry asking:\n'Break down Opex by category for February 2024'\n'Show gross margin for last 3 months'\n'What was February 2024 revenue vs budget?'",
                 "chart": None
             }
