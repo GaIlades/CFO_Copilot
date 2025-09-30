@@ -54,7 +54,9 @@ if data_loaded:
     st.sidebar.header("Sample Questions")
     sample_questions = [
         "What was February 2024 revenue vs budget in USD?",
-        "Show revenue vs budget for all months"
+        "Show revenue vs budget for all months",
+        "Show gross margin % trend for last 3 months",
+        "What is our gross margin?"
     ]
 
     for question in sample_questions:

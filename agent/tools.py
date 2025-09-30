@@ -123,6 +123,62 @@ class FinanceTools:
         
         return fig
 
+    def get_gross_margin_trend(self, months=None):
+        """Calculate gross margin % trend over time"""
+        if self.actuals.empty:
+            return pd.DataFrame()
+        
+        # Get revenue
+        revenue = self.actuals[self.actuals['account_category'].str.contains('Revenue', case=False, na=False)].copy()
+        revenue_usd = self.convert_to_usd(revenue)
+        revenue_by_month = revenue_usd.groupby('month')['amount_usd'].sum().reset_index()
+        revenue_by_month.rename(columns={'amount_usd': 'revenue'}, inplace=True)
+        
+        # Get COGS
+        cogs = self.actuals[self.actuals['account_category'].str.contains('COGS', case=False, na=False)].copy()
+        cogs_usd = self.convert_to_usd(cogs)
+        cogs_by_month = cogs_usd.groupby('month')['amount_usd'].sum().reset_index()
+        cogs_by_month.rename(columns={'amount_usd': 'cogs'}, inplace=True)
+        
+        # Merge and calculate margin
+        margin_data = revenue_by_month.merge(cogs_by_month, on='month', how='left')
+        margin_data['cogs'] = margin_data['cogs'].fillna(0)
+        margin_data['gross_margin'] = margin_data['revenue'] - margin_data['cogs']
+        margin_data['gross_margin_pct'] = (margin_data['gross_margin'] / margin_data['revenue']) * 100
+        
+        # Filter by number of months if specified
+        if months:
+            margin_data = margin_data.tail(months)
+        
+        return margin_data
+
+    def create_margin_chart(self, data):
+        """Create gross margin trend chart"""
+        if data.empty:
+            return None
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=data['month'],
+            y=data['gross_margin_pct'],
+            mode='lines+markers',
+            name='Gross Margin %',
+            line=dict(color='#06A77D', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig.update_layout(
+            title='Gross Margin % Trend',
+            xaxis_title='Month',
+            yaxis_title='Gross Margin %',
+            template='plotly_white',
+            height=400,
+            yaxis=dict(ticksuffix='%')
+        )
+        
+        return fig
+
     def get_data_summary(self):
         """Get summary of all loaded data"""
         summary = {
