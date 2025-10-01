@@ -221,6 +221,90 @@ class FinanceTools:
         
         return fig
 
+    def get_ebitda(self, month=None):
+        """Calculate EBITDA (Revenue - COGS - Opex)"""
+        if self.actuals.empty:
+            return {"error": "No actuals data available"}
+        
+        # Get revenue
+        revenue = self.actuals[self.actuals['account_category'].str.contains('Revenue', case=False, na=False)].copy()
+        revenue_usd = self.convert_to_usd(revenue)
+        
+        # Get COGS
+        cogs = self.actuals[self.actuals['account_category'].str.contains('COGS', case=False, na=False)].copy()
+        cogs_usd = self.convert_to_usd(cogs)
+        
+        # Get Opex
+        opex = self.actuals[self.actuals['account_category'].str.contains('Opex:', case=False, na=False)].copy()
+        opex_usd = self.convert_to_usd(opex)
+        
+        # Filter by month if specified
+        if month:
+            revenue_usd = revenue_usd[revenue_usd['month'] == month]
+            cogs_usd = cogs_usd[cogs_usd['month'] == month]
+            opex_usd = opex_usd[opex_usd['month'] == month]
+        
+        # Sum amounts
+        total_revenue = revenue_usd['amount_usd'].sum()
+        total_cogs = cogs_usd['amount_usd'].sum()
+        total_opex = opex_usd['amount_usd'].sum()
+        
+        ebitda = total_revenue - total_cogs - total_opex
+        
+        return {
+            "revenue": total_revenue,
+            "cogs": total_cogs,
+            "opex": total_opex,
+            "ebitda": ebitda
+        }
+
+    def calculate_cash_runway(self):
+        """Calculate cash runway based on current cash and average monthly burn"""
+        if self.cash.empty:
+            return {"error": "No cash data available"}
+        
+        if self.actuals.empty:
+            return {"error": "No actuals data available"}
+        
+        # Get current cash (most recent month)
+        cash_sorted = self.cash.sort_values('month', ascending=False)
+        current_cash = cash_sorted.iloc[0]['cash_usd']
+        
+        # Calculate net income by month for last 3 months
+        actuals_usd = self.convert_to_usd(self.actuals)
+        
+        # Get revenue
+        revenue = actuals_usd[actuals_usd['account_category'].str.contains('Revenue', case=False, na=False)]
+        revenue_by_month = revenue.groupby('month')['amount_usd'].sum()
+        
+        # Get all expenses (COGS + Opex)
+        cogs = actuals_usd[actuals_usd['account_category'].str.contains('COGS', case=False, na=False)]
+        opex = actuals_usd[actuals_usd['account_category'].str.contains('Opex:', case=False, na=False)]
+        
+        cogs_by_month = cogs.groupby('month')['amount_usd'].sum()
+        opex_by_month = opex.groupby('month')['amount_usd'].sum()
+        
+        # Calculate net income (revenue - expenses)
+        net_income = revenue_by_month - cogs_by_month.reindex(revenue_by_month.index, fill_value=0) - opex_by_month.reindex(revenue_by_month.index, fill_value=0)
+        
+        # Get last 3 months
+        net_income_last_3 = net_income.tail(3)
+        
+        # Average monthly burn (negative net income)
+        avg_monthly_burn = abs(net_income_last_3.mean())
+        
+        # Calculate runway
+        if avg_monthly_burn == 0:
+            runway_months = float('inf')
+        else:
+            runway_months = current_cash / avg_monthly_burn
+        
+        return {
+            "current_cash": current_cash,
+            "avg_monthly_burn": avg_monthly_burn,
+            "runway_months": runway_months
+        }
+
     def get_data_summary(self):
         """Get summary of all loaded data"""
         summary = {

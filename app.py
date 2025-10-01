@@ -58,7 +58,9 @@ if data_loaded:
         "Show gross margin % trend for last 3 months",
         "What is our gross margin?",
         "Break down Opex by category for February 2024",
-        "Show operating expenses"
+        "Show operating expenses",
+        "What is our EBITDA for February 2024?",
+        "What is our cash runway right now?"
     ]
 
     for question in sample_questions:

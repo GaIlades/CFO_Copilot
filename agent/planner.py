@@ -52,6 +52,40 @@ class CFOPlanner:
             
             return {"text": text, "chart": chart}
         
+        # EBITDA
+        elif 'ebitda' in question_lower:
+            month = self.extract_month(question)
+            ebitda_data = self.tools.get_ebitda(month)
+            
+            if "error" in ebitda_data:
+                return {"text": ebitda_data["error"], "chart": None}
+            
+            text = f"**EBITDA Analysis{' for ' + month if month else ''}:**\n\n"
+            text += f"Revenue: ${ebitda_data['revenue']:,.0f}\n"
+            text += f"COGS: ${ebitda_data['cogs']:,.0f}\n"
+            text += f"Opex: ${ebitda_data['opex']:,.0f}\n"
+            text += f"EBITDA: ${ebitda_data['ebitda']:,.0f}"
+            
+            return {"text": text, "chart": None}
+
+        # Cash Runway
+        elif 'cash' in question_lower or 'runway' in question_lower or 'burn' in question_lower:
+            runway_data = self.tools.calculate_cash_runway()
+            
+            if "error" in runway_data:
+                return {"text": runway_data["error"], "chart": None}
+            
+            text = f"**Cash Runway Analysis:**\n\n"
+            text += f"Current Cash: ${runway_data['current_cash']:,.0f}\n"
+            text += f"Avg Monthly Burn: ${runway_data['avg_monthly_burn']:,.0f}\n"
+            
+            if runway_data['runway_months'] == float('inf'):
+                text += f"Runway: Cash positive (no burn)"
+            else:
+                text += f"Runway: {runway_data['runway_months']:.1f} months"
+            
+            return {"text": text, "chart": None}
+
         # Gross Margin
         elif 'margin' in question_lower or 'gross' in question_lower:
             months = self.extract_months_count(question)
@@ -106,6 +140,6 @@ class CFOPlanner:
         
         else:
             return {
-                "text": "I can help you with:\nRevenue vs budget analysis\nGross margin trends\nOperating expenses breakdown\n\nTry asking:\n'Break down Opex by category for February 2024'\n'Show gross margin for last 3 months'\n'What was February 2024 revenue vs budget?'",
+                "text": "I can help you with:\nRevenue vs budget analysis\nGross margin trends\nOperating expenses breakdown\nEBITDA calculation\nCash runway analysis\n\nTry asking:\n'What was February 2024 revenue vs budget?'\n'Show gross margin for last 3 months'\n'Break down Opex by category for February 2024'\n'What is our EBITDA?'\n'What is our cash runway?'",
                 "chart": None
             }
